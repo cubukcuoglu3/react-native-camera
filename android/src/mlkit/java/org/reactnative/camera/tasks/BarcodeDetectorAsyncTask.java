@@ -17,6 +17,13 @@ import org.reactnative.barcodedetector.BarcodeFormatUtils;
 import org.reactnative.barcodedetector.RNBarcodeDetector;
 import org.reactnative.camera.utils.ImageDimensions;
 
+import android.graphics.Point;
+
+import androidx.annotation.NonNull;
+
+import com.facebook.react.bridge.WritableNativeArray;
+import com.facebook.react.bridge.WritableNativeMap;
+
 import java.util.List;
 
 public class BarcodeDetectorAsyncTask extends android.os.AsyncTask<Void, Void, Void> {
@@ -74,7 +81,7 @@ public class BarcodeDetectorAsyncTask extends android.os.AsyncTask<Void, Void, V
             .addOnSuccessListener(new OnSuccessListener<List<Barcode>>() {
               @Override
               public void onSuccess(List<Barcode> barcodes) {
-                WritableArray serializedBarcodes = serializeEventData(barcodes);
+                WritableArray serializedBarcodes = convertBarcodes(barcodes);
                 mDelegate.onBarcodesDetected(serializedBarcodes, mWidth, mHeight, mImageData);
                 mDelegate.onBarcodeDetectingTaskCompleted();
               }
@@ -113,236 +120,337 @@ public class BarcodeDetectorAsyncTask extends android.os.AsyncTask<Void, Void, V
   }
 
 
-  private WritableArray serializeEventData(List<Barcode> barcodes) {
-    WritableArray barcodesList = Arguments.createArray();
+  public static WritableNativeArray convertToArray(@NonNull Point[] points) {
+    WritableNativeArray array = new WritableNativeArray();
 
-    for (Barcode barcode: barcodes) {
-      // TODO implement position and data from all barcode types
-      Rect bounds = barcode.getBoundingBox();
-//      Point[] corners = barcode.getCornerPoints();
-
-      String rawValue = barcode.getRawValue();
-
-      int valueType = barcode.getValueType();
-      int valueFormat = barcode.getFormat();
-
-      WritableMap serializedBarcode = Arguments.createMap();
-
-      switch (valueType) {
-        case Barcode.TYPE_WIFI:
-          String ssid = barcode.getWifi().getSsid();
-          String password = barcode.getWifi().getPassword();
-          int type = barcode.getWifi().getEncryptionType();
-          String typeString = "UNKNOWN";
-          switch (type) {
-            case Barcode.WiFi.TYPE_OPEN:
-              typeString = "Open";
-              break;
-            case Barcode.WiFi.TYPE_WEP:
-              typeString = "WEP";
-              break;
-            case Barcode.WiFi.TYPE_WPA:
-              typeString = "WPA";
-              break;
-          }
-          serializedBarcode.putString("encryptionType", typeString);
-          serializedBarcode.putString("password", password);
-          serializedBarcode.putString("ssid", ssid);
-          break;
-        case Barcode.TYPE_URL:
-          String title = barcode.getUrl().getTitle();
-          String url = barcode.getUrl().getUrl();
-          serializedBarcode.putString("url", url);
-          serializedBarcode.putString("title", title);
-          break;
-        case Barcode.TYPE_SMS:
-          String message = barcode.getSms().getMessage();
-          String phoneNumber = barcode.getSms().getPhoneNumber();
-          serializedBarcode.putString("message", message);
-          serializedBarcode.putString("title", phoneNumber);
-          break;
-        case Barcode.TYPE_PHONE:
-          String number = barcode.getPhone().getNumber();
-          int typePhone = barcode.getPhone().getType();
-          serializedBarcode.putString("number", number);
-          String typeStringPhone = getPhoneType(typePhone);
-          serializedBarcode.putString("phoneType", typeStringPhone);
-          break;
-        case Barcode.TYPE_CALENDAR_EVENT:
-          serializedBarcode.putString("description", barcode.getCalendarEvent().getDescription());
-          serializedBarcode.putString("location", barcode.getCalendarEvent().getLocation());
-          serializedBarcode.putString("organizer", barcode.getCalendarEvent().getOrganizer());
-          serializedBarcode.putString("status", barcode.getCalendarEvent().getStatus());
-          serializedBarcode.putString("summary", barcode.getCalendarEvent().getSummary());
-          Barcode.CalendarDateTime start = barcode.getCalendarEvent().getStart();
-          Barcode.CalendarDateTime end = barcode.getCalendarEvent().getEnd();
-          if (start != null) {
-            serializedBarcode.putString("start", start.getRawValue());
-          }
-          if (end != null) {
-            serializedBarcode.putString("end", start.getRawValue());
-          }
-          break;
-        case Barcode.TYPE_DRIVER_LICENSE:
-          serializedBarcode.putString("addressCity", barcode.getDriverLicense().getAddressCity());
-          serializedBarcode.putString("addressState", barcode.getDriverLicense().getAddressState());
-          serializedBarcode.putString("addressStreet", barcode.getDriverLicense().getAddressStreet());
-          serializedBarcode.putString("addressZip", barcode.getDriverLicense().getAddressZip());
-          serializedBarcode.putString("birthDate", barcode.getDriverLicense().getBirthDate());
-          serializedBarcode.putString("documentType", barcode.getDriverLicense().getDocumentType());
-          serializedBarcode.putString("expiryDate", barcode.getDriverLicense().getExpiryDate());
-          serializedBarcode.putString("firstName", barcode.getDriverLicense().getFirstName());
-          serializedBarcode.putString("middleName", barcode.getDriverLicense().getMiddleName());
-          serializedBarcode.putString("lastName", barcode.getDriverLicense().getLastName());
-          serializedBarcode.putString("gender", barcode.getDriverLicense().getGender());
-          serializedBarcode.putString("issueDate", barcode.getDriverLicense().getIssueDate());
-          serializedBarcode.putString("issuingCountry", barcode.getDriverLicense().getIssuingCountry());
-          serializedBarcode.putString("licenseNumber", barcode.getDriverLicense().getLicenseNumber());
-          break;
-        case Barcode.TYPE_GEO:
-          serializedBarcode.putDouble("latitude", barcode.getGeoPoint().getLat());
-          serializedBarcode.putDouble("longitude", barcode.getGeoPoint().getLng());
-          break;
-        case Barcode.TYPE_CONTACT_INFO:
-          serializedBarcode.putString("organization", barcode.getContactInfo().getOrganization());
-          serializedBarcode.putString("title", barcode.getContactInfo().getTitle());
-          Barcode.PersonName name = barcode.getContactInfo().getName();
-          if (name != null) {
-            serializedBarcode.putString("firstName", name.getFirst());
-            serializedBarcode.putString("lastName", name.getLast());
-            serializedBarcode.putString("middleName", name.getMiddle());
-            serializedBarcode.putString("formattedName", name.getFormattedName());
-            serializedBarcode.putString("prefix", name.getPrefix());
-            serializedBarcode.putString("pronunciation", name.getPronunciation());
-            serializedBarcode.putString("suffix", name.getSuffix());
-          }
-          List<Barcode.Phone> phones = barcode.getContactInfo().getPhones();
-          WritableArray phonesList = Arguments.createArray();
-          for (Barcode.Phone phone : phones) {
-            WritableMap phoneObject = Arguments.createMap();
-            phoneObject.putString("number", phone.getNumber());
-            phoneObject.putString("phoneType", getPhoneType(phone.getType()));
-            phonesList.pushMap(phoneObject);
-          }
-          serializedBarcode.putArray("phones", phonesList);
-          List<Barcode.Address> addresses = barcode.getContactInfo().getAddresses();
-          WritableArray addressesList = Arguments.createArray();
-          for (Barcode.Address address : addresses) {
-            WritableMap addressesData = Arguments.createMap();
-            WritableArray addressesLinesList = Arguments.createArray();
-            String[] addressesLines = address.getAddressLines();
-            for (String line : addressesLines) {
-              addressesLinesList.pushString(line);
-            }
-            addressesData.putArray("addressLines", addressesLinesList);
-
-            int addressType = address.getType();
-            String addressTypeString = "UNKNOWN";
-            switch(addressType) {
-              case Barcode.Address.TYPE_WORK:
-                addressTypeString = "Work";
-                break;
-              case Barcode.Address.TYPE_HOME:
-                addressTypeString = "Home";
-                break;
-            }
-            addressesData.putString("addressType", addressTypeString);
-            addressesList.pushMap(addressesData);
-          }
-          serializedBarcode.putArray("addresses", addressesList);
-          List<Barcode.Email> emails = barcode.getContactInfo().getEmails();
-          WritableArray emailsList = Arguments.createArray();
-          for (Barcode.Email email : emails) {
-            WritableMap emailData = processEmail(email);
-            emailsList.pushMap(emailData);
-          }
-          serializedBarcode.putArray("emails", emailsList);
-          List<String> urls = barcode.getContactInfo().getUrls();
-          WritableArray urlsList = Arguments.createArray();
-          for (String urlContact : urls) {
-            urlsList.pushString(urlContact);
-          }
-          serializedBarcode.putArray("urls", urlsList);
-          break;
-        case Barcode.TYPE_EMAIL:
-          WritableMap emailData = processEmail(barcode.getEmail());
-          serializedBarcode.putMap("email", emailData);
-          break;
-      }
-
-      serializedBarcode.putString("data", barcode.getDisplayValue());
-      serializedBarcode.putString("dataRaw", rawValue);
-      serializedBarcode.putString("type", BarcodeFormatUtils.get(valueType));
-      serializedBarcode.putString("format", BarcodeFormatUtils.getFormat(valueFormat));
-      serializedBarcode.putMap("bounds", processBounds(bounds));
-      barcodesList.pushMap(serializedBarcode);
+    for (Point point: points) {
+      array.pushMap(convertToMap(point));
     }
 
-    return barcodesList;
+    return array;
   }
 
-  private WritableMap processEmail(Barcode.Email email) {
-    WritableMap emailData = Arguments.createMap();
-    emailData.putString("address", email.getAddress());
-    emailData.putString("body", email.getBody());
-    emailData.putString("subject", email.getSubject());
-    int emailType = email.getType();
-    String emailTypeString = "UNKNOWN";
-    switch (emailType) {
-      case Barcode.Email.TYPE_WORK:
-        emailTypeString = "Work";
+  public static WritableNativeArray convertToArray(@NonNull String[] elements) {
+    WritableNativeArray array = new WritableNativeArray();
+
+    for (String elem: elements) {
+      array.pushString(elem);
+    }
+
+    return array;
+  }
+
+  public static WritableNativeArray convertStringList(@NonNull List<String> elements) {
+    WritableNativeArray array = new WritableNativeArray();
+
+    for (String elem: elements) {
+      array.pushString(elem);
+    }
+
+    return array;
+  }
+
+  public static WritableNativeArray convertAddressList(@NonNull List<Barcode.Address> addresses) {
+    WritableNativeArray array = new WritableNativeArray();
+
+    for (Barcode.Address address: addresses) {
+      array.pushMap(convertToMap(address));
+    }
+
+    return array;
+  }
+
+  public static WritableNativeArray convertPhoneList(@NonNull List<Barcode.Phone> phones) {
+    WritableNativeArray array = new WritableNativeArray();
+
+    for (Barcode.Phone phone: phones) {
+      array.pushMap(convertToMap(phone));
+    }
+
+    return array;
+  }
+
+  public static WritableNativeArray convertEmailList(@NonNull List<Barcode.Email> emails) {
+    WritableNativeArray array = new WritableNativeArray();
+
+    for (Barcode.Email email: emails) {
+      array.pushMap(convertToMap(email));
+    }
+
+    return array;
+  }
+
+  public static WritableNativeMap convertToMap(@NonNull Point point) {
+    WritableNativeMap map = new WritableNativeMap();
+
+    map.putInt("x", point.x);
+    map.putInt("y", point.y);
+
+    return map;
+  }
+
+  public static WritableNativeMap convertToMap(@NonNull Barcode.Address address) {
+    WritableNativeMap map = new WritableNativeMap();
+
+    map.putArray("addressLines", convertToArray(address.getAddressLines()));
+    map.putInt("type", address.getType());
+
+    return map;
+  }
+
+  public static WritableNativeMap convertToMap(@NonNull Rect rect) {
+    WritableNativeMap map = new WritableNativeMap();
+
+    map.putInt("bottom", rect.bottom);
+    map.putInt("left", rect.left);
+    map.putInt("right", rect.right);
+    map.putInt("top", rect.top);
+
+    return map;
+  }
+
+  public static WritableNativeMap convertToMap(@NonNull Barcode.ContactInfo contactInfo) {
+    WritableNativeMap map = new WritableNativeMap();
+
+    map.putArray("addresses", convertAddressList(contactInfo.getAddresses()));
+    map.putArray("emails", convertEmailList(contactInfo.getEmails()));
+    map.putMap("name", convertToMap(contactInfo.getName()));
+    map.putString("organization", contactInfo.getOrganization());
+    map.putArray("phones", convertPhoneList(contactInfo.getPhones()));
+    map.putString("title", contactInfo.getTitle());
+    map.putArray("urls", convertStringList(contactInfo.getUrls()));
+
+    return map;
+  }
+
+  public static WritableNativeMap convertToMap(@NonNull Barcode.PersonName name) {
+    WritableNativeMap map = new WritableNativeMap();
+
+    map.putString("first", name.getFirst());
+    map.putString("formattedName", name.getFormattedName());
+    map.putString("last", name.getLast());
+    map.putString("middle", name.getMiddle());
+    map.putString("prefix", name.getPrefix());
+    map.putString("pronunciation", name.getPronunciation());
+    map.putString("suffix", name.getSuffix());
+
+    return map;
+  }
+
+  public static WritableNativeMap convertToMap(@NonNull Barcode.UrlBookmark url) {
+    WritableNativeMap map = new WritableNativeMap();
+
+    map.putString("title", url.getTitle());
+    map.putString("url", url.getUrl());
+
+    return map;
+  }
+
+  public static WritableNativeMap convertToMap(@NonNull Barcode.Email email) {
+    WritableNativeMap map = new WritableNativeMap();
+
+    map.putString("address", email.getAddress());
+    map.putString("body", email.getBody());
+    map.putString("subject", email.getSubject());
+    map.putInt("type", email.getType());
+
+    return map;
+  }
+
+  public static WritableNativeMap convertToMap(@NonNull Barcode.Phone phone) {
+    WritableNativeMap map = new WritableNativeMap();
+
+    map.putString("number", phone.getNumber());
+    map.putInt("type", phone.getType());
+
+    return map;
+  }
+
+  public static WritableNativeMap convertToMap(@NonNull Barcode.Sms sms) {
+    WritableNativeMap map = new WritableNativeMap();
+
+    map.putString("message", sms.getMessage());
+    map.putString("phoneNumber", sms.getPhoneNumber());
+
+    return map;
+  }
+
+  public static WritableNativeMap convertToMap(@NonNull Barcode.WiFi wifi) {
+    WritableNativeMap map = new WritableNativeMap();
+
+    map.putInt("encryptionType", wifi.getEncryptionType());
+    map.putString("password", wifi.getPassword());
+    map.putString("ssid", wifi.getSsid());
+
+    return map;
+  }
+
+  public static WritableNativeMap convertToMap(@NonNull Barcode.GeoPoint geoPoint) {
+    WritableNativeMap map = new WritableNativeMap();
+
+    map.putDouble("lat", geoPoint.getLat());
+    map.putDouble("lng", geoPoint.getLng());
+
+    return map;
+  }
+
+  public static WritableNativeMap convertToMap(@NonNull Barcode.CalendarDateTime calendarDateTime) {
+    WritableNativeMap map = new WritableNativeMap();
+
+    map.putInt("day", calendarDateTime.getDay());
+    map.putInt("hours", calendarDateTime.getHours());
+    map.putInt("minutes", calendarDateTime.getMinutes());
+    map.putInt("month", calendarDateTime.getMonth());
+    map.putString("rawValue", calendarDateTime.getRawValue());
+    map.putInt("year", calendarDateTime.getYear());
+    map.putInt("seconds", calendarDateTime.getSeconds());
+    map.putBoolean("isUtc", calendarDateTime.isUtc());
+
+    return map;
+  }
+
+  public static WritableNativeMap convertToMap(@NonNull Barcode.CalendarEvent calendarEvent) {
+    WritableNativeMap map = new WritableNativeMap();
+
+    map.putString("description", calendarEvent.getDescription());
+    map.putMap("end", convertToMap(calendarEvent.getEnd()));
+    map.putString("location", calendarEvent.getLocation());
+    map.putString("organizer", calendarEvent.getOrganizer());
+    map.putMap("start", convertToMap(calendarEvent.getStart()));
+    map.putString("status", calendarEvent.getStatus());
+    map.putString("summary", calendarEvent.getSummary());
+
+    return map;
+  }
+
+  public static WritableNativeMap convertToMap(@NonNull Barcode.DriverLicense driverLicense) {
+    WritableNativeMap map = new WritableNativeMap();
+
+    map.putString("addressCity", driverLicense.getAddressCity());
+    map.putString("addressState", driverLicense.getAddressState());
+    map.putString("addressStreet", driverLicense.getAddressStreet());
+    map.putString("addressZip", driverLicense.getAddressZip());
+    map.putString("birthDate", driverLicense.getBirthDate());
+    map.putString("documentType", driverLicense.getDocumentType());
+    map.putString("expiryDate", driverLicense.getExpiryDate());
+    map.putString("firstName", driverLicense.getFirstName());
+    map.putString("gender", driverLicense.getGender());
+    map.putString("issueDate", driverLicense.getIssueDate());
+    map.putString("issuingCountry", driverLicense.getIssuingCountry());
+    map.putString("lastName", driverLicense.getLastName());
+    map.putString("licenseNumber", driverLicense.getLicenseNumber());
+    map.putString("middleName", driverLicense.getMiddleName());
+
+    return map;
+  }
+
+  public static WritableNativeMap convertContent(@NonNull Barcode barcode) {
+    WritableNativeMap map = new WritableNativeMap();
+
+    int type = barcode.getValueType();
+
+    map.putInt("type", type);
+
+    switch (type) {
+      case Barcode.TYPE_UNKNOWN:
+      case Barcode.TYPE_ISBN:
+      case Barcode.TYPE_TEXT:
+      case Barcode.TYPE_PRODUCT:
+        map.putString("content", barcode.getRawValue());
         break;
-      case Barcode.Email.TYPE_HOME:
-        emailTypeString = "Home";
+      case Barcode.TYPE_CONTACT_INFO:
+        map.putMap("content", convertToMap(barcode.getContactInfo()));
+        break;
+      case Barcode.TYPE_EMAIL:
+        map.putMap("content", convertToMap(barcode.getEmail()));
+        break;
+      case Barcode.TYPE_PHONE:
+        map.putMap("content", convertToMap(barcode.getPhone()));
+        break;
+      case Barcode.TYPE_SMS:
+        map.putMap("content", convertToMap(barcode.getSms()));
+        break;
+      case Barcode.TYPE_URL:
+        map.putMap("content", convertToMap(barcode.getUrl()));
+        break;
+      case Barcode.TYPE_WIFI:
+        map.putMap("content", convertToMap(barcode.getWifi()));
+        break;
+      case Barcode.TYPE_GEO:
+        map.putMap("content", convertToMap(barcode.getGeoPoint()));
+        break;
+      case Barcode.TYPE_CALENDAR_EVENT:
+        map.putMap("content", convertToMap(barcode.getCalendarEvent()));
+        break;
+      case Barcode.TYPE_DRIVER_LICENSE:
+        map.putMap("content", convertToMap(barcode.getDriverLicense()));
         break;
     }
-    emailData.putString("emailType", emailTypeString);
-    return emailData;
+
+    return map;
   }
 
-  private String getPhoneType(int typePhone) {
-    String typeStringPhone = "UNKNOWN";
-    switch(typePhone) {
-      case Barcode.Phone.TYPE_WORK:
-        typeStringPhone = "Work";
-        break;
-      case Barcode.Phone.TYPE_HOME:
-        typeStringPhone = "Home";
-        break;
-      case Barcode.Phone.TYPE_FAX:
-        typeStringPhone = "Fax";
-        break;
-      case Barcode.Phone.TYPE_MOBILE:
-        typeStringPhone = "Mobile";
-        break;
-    }
-    return typeStringPhone;
-  }
-
-  private WritableMap processBounds(Rect frame) {
+  public WritableMap processBounds(Rect frame) {
     WritableMap origin = Arguments.createMap();
     int x = frame.left;
     int y = frame.top;
 
-    if (frame.left < mWidth / 2) {
-      x = x + mPaddingLeft / 2;
-    } else if (frame.left > mWidth /2) {
-      x = x - mPaddingLeft / 2;
-    }
+    origin.putDouble("x", x);
+    origin.putDouble("y", y);
 
-    y = y + mPaddingTop;
-
-    origin.putDouble("x", x * mScaleX);
-    origin.putDouble("y", y * mScaleY);
-
-    WritableMap size = Arguments.createMap();
-    size.putDouble("width", frame.width() * mScaleX);
-    size.putDouble("height", frame.height() * mScaleY);
+    WritableMap frameSize = Arguments.createMap();
+    frameSize.putDouble("width", mWidth);
+    frameSize.putDouble("height", mHeight);
 
     WritableMap bounds = Arguments.createMap();
     bounds.putMap("origin", origin);
-    bounds.putMap("size", size);
+    bounds.putMap("frameSize", frameSize);
+
     return bounds;
   }
 
+  public WritableNativeMap convertBarcode(@NonNull Barcode barcode) {
+    WritableNativeMap map = new WritableNativeMap();
+
+    Rect boundingBox = barcode.getBoundingBox();
+    if (boundingBox != null) {
+      map.putMap("boundingBox", convertToMap(boundingBox));
+    }
+
+    Point[] cornerPoints = barcode.getCornerPoints();
+    if (cornerPoints != null) {
+      map.putArray("cornerPoints", convertToArray(cornerPoints));
+    }
+
+    String displayValue = barcode.getDisplayValue();
+    if (displayValue != null) {
+      map.putString("displayValue", displayValue);
+    }
+
+    String rawValue = barcode.getRawValue();
+    if (rawValue != null) {
+      map.putString("rawValue", rawValue);
+    }
+
+    map.putMap("content", convertContent(barcode));
+    map.putMap("bounds", processBounds(boundingBox));
+
+    return map;
+  }
+
+  public WritableArray convertBarcodes(List<Barcode> barcodes) {
+      try {
+        WritableArray array = new WritableNativeArray();
+
+        for (Barcode barcode: barcodes) {
+          array.pushMap(convertBarcode(barcode));
+        }
+
+        return array;
+      } catch (Exception e) {
+        e.printStackTrace();
+      }
+
+      return null;
+  }
 }
